@@ -72,11 +72,10 @@ int main() {
 
     fclose(file);
 
-    int numProcesses = numStudents /2; 
+    int numProcesses = 4; // Nombre de processus
     int studentsPerProcess = numStudents / numProcesses;
     int extraStudents = numStudents % numProcesses;
 
-    
     key_t key = ftok("students.csv", 'A');
     int sem_id = semget(key, 1, IPC_CREAT | 0666);
     if (sem_id == -1) {
@@ -87,6 +86,7 @@ int main() {
     arg.val = 1;
     semctl(sem_id, 0, SETVAL, arg);
 
+    // La mémoire partagée pour stocker les résultats
     int shm_id = shmget(IPC_PRIVATE, MAX_STUDENTS * (MAX_NAME_LENGTH + 50) * numProcesses, IPC_CREAT | 0666);
     if (shm_id == -1) {
         perror("shmget");
@@ -102,16 +102,20 @@ int main() {
     gettimeofday(&start_time, NULL);
 
     for (int i = 0; i < numProcesses; i++) {
-        int start = i * studentsPerProcess;
+        // Répartition des étudiants parmi les processus
+        int start = i * studentsPerProcess + (i < extraStudents ? i : extraStudents);
         int end = start + studentsPerProcess + (i < extraStudents ? 1 : 0);
+        
         int offset = i * MAX_STUDENTS * (MAX_NAME_LENGTH + 50);
 
         int pid = fork();
         if (pid == 0) {
+            // Chaque processus attend le sémaphore avant de commencer
             wait_semaphore(sem_id, 0);
 
             writeAbsentStudents(students, start, end, shared_memory, offset, getpid());
 
+            // Libération du sémaphore après l'écriture
             signal_semaphore(sem_id, 0);
             shmdt(shared_memory); 
             exit(0);
@@ -123,15 +127,18 @@ int main() {
         }
     }
 
+    // Attente de la fin de tous les processus enfants
     for (int i = 0; i < numProcesses; i++) {
         wait(NULL);
     }
 
+    // Affichage des résultats collectés dans la mémoire partagée
     for (int i = 0; i < numProcesses; i++) {
         int offset = i * MAX_STUDENTS * (MAX_NAME_LENGTH + 50);
         printf("%s", shared_memory + offset);
     }
 
+    // Détachement et nettoyage de la mémoire partagée
     shmdt(shared_memory);
     shmctl(shm_id, IPC_RMID, NULL);
 
@@ -140,6 +147,7 @@ int main() {
 
     printf("Total execution time: %.6f seconds\n", execution_time);
 
+    // Suppression du sémaphore
     semctl(sem_id, 0, IPC_RMID, arg);
 
     return 0;
