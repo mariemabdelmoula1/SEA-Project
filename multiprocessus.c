@@ -76,6 +76,7 @@ int main() {
     int studentsPerProcess = numStudents / numProcesses;
     int extraStudents = numStudents % numProcesses;
 
+    //Création d'un sémaphore pour la synchronisation
     key_t key = ftok("students.csv", 'A');
     int sem_id = semget(key, 1, IPC_CREAT | 0666);
     if (sem_id == -1) {
@@ -100,7 +101,7 @@ int main() {
 
     struct timeval start_time, end_time;
     gettimeofday(&start_time, NULL);
-
+    //Création des processus enfants pour traiter les données
     for (int i = 0; i < numProcesses; i++) {
         // Répartition des étudiants parmi les processus
         int start = i * studentsPerProcess + (i < extraStudents ? i : extraStudents);
